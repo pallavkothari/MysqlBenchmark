@@ -4,15 +4,17 @@ import java.math.BigInteger;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantLock;
 
 import com.codahale.metrics.ConsoleReporter;
 import com.codahale.metrics.Counter;
@@ -21,10 +23,10 @@ import com.codahale.metrics.Metric;
 import com.codahale.metrics.MetricFilter;
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.base.Stopwatch;
+import com.google.common.collect.Lists;
 
 /**
  * TODO 
- * - introduce some parallelism 
  * - read 10x whatever you write 
  * - expand row sizes, select sum(length(colN))
  * - make sure queries are not served from memory 
@@ -33,17 +35,12 @@ import com.google.common.base.Stopwatch;
  */
 public class MysqlBenchmark {
 	
-	private static final int TOTAL_RECORDS = 20_000;
+	private static final int NUM_THREADS = 10;
+	private static final int TOTAL_RECORDS = 1_000_000;
 	private static final int BATCH_SIZE = 10_000;
 
 	private static final MetricRegistry metrics = new MetricRegistry(); 
 	private static final ConsoleReporter reporter = ConsoleReporter.forRegistry(metrics).convertRatesTo(TimeUnit.SECONDS).convertDurationsTo(TimeUnit.MILLISECONDS).build();
-	private static final Meter inserts1 = metrics.meter(Strategy.BASELINE.name() + "-meter");
-	private static final Meter inserts2 = metrics.meter(Strategy.UUID_CHAR.name() + "-meter");
-	private static final Meter inserts3 = metrics.meter(Strategy.UUID_OPTIMIZED.name() + "-meter");
-	private static final Counter writes1 = metrics.counter(Strategy.BASELINE.name() + "-counter"); 
-	private static final Counter writes2 = metrics.counter(Strategy.UUID_CHAR.name() + "-counter");
-	private static final Counter writes3 = metrics.counter(Strategy.UUID_OPTIMIZED.name() + "-counter");
 
 	private static final String DB_NAME = "BENCHMARK";
 	private static final String TABLE_1 = "T1";
@@ -56,7 +53,6 @@ public class MysqlBenchmark {
 	private static final Stopwatch stopwatch = Stopwatch.createUnstarted();
 
 	private static final BlockingQueue<String> guids = new LinkedBlockingDeque<>(TOTAL_RECORDS);
-	private static final AtomicInteger id = new AtomicInteger(0);
 	
 	enum Strategy {
 		BASELINE {
@@ -84,9 +80,9 @@ public class MysqlBenchmark {
 			}
 
 			@Override
-			public void addRecordToBatch(PreparedStatement stmt) throws SQLException, InterruptedException {
+			public void addRecordToBatch(PreparedStatement stmt, String nextGuid) throws SQLException, InterruptedException {
 				stmt.clearParameters();
-				int nextId = id.incrementAndGet();
+				int nextId = Integer.valueOf(nextGuid);
 				stmt.setInt(1, nextId);
 				stmt.setInt(2, nextId);
 				stmt.setInt(3, nextId);
@@ -95,8 +91,8 @@ public class MysqlBenchmark {
 
 			@Override
 			public void afterBatch() {
-				inserts1.mark();
-				writes1.inc(BATCH_SIZE);
+				Lazy1.inserts1.mark();
+				Lazy1.writes1.inc(BATCH_SIZE);
 			}
 		}, 
 		
@@ -125,20 +121,19 @@ public class MysqlBenchmark {
 			}
 
 			@Override
-			public void addRecordToBatch(PreparedStatement stmt) throws SQLException, InterruptedException {
+			public void addRecordToBatch(PreparedStatement stmt, String nextGuid) throws SQLException, InterruptedException {
 				stmt.clearParameters();
-				String val = guids.take();
-				stmt.setString(1, val);
-				stmt.setString(2, val);
-				stmt.setString(3, val);
-				stmt.setString(4, val);
+				stmt.setString(1, nextGuid);
+				stmt.setString(2, nextGuid);
+				stmt.setString(3, nextGuid);
+				stmt.setString(4, nextGuid);
 				stmt.addBatch();
 			}
 
 			@Override
 			public void afterBatch() {
-				inserts2.mark();
-				writes2.inc(BATCH_SIZE);
+				Lazy2.inserts2.mark();
+				Lazy2.writes2.inc(BATCH_SIZE);
 			}
 		},
 		
@@ -168,9 +163,9 @@ public class MysqlBenchmark {
 			}
 
 			@Override
-			public void addRecordToBatch(PreparedStatement stmt) throws SQLException, InterruptedException {
+			public void addRecordToBatch(PreparedStatement stmt, String nextGuid) throws SQLException, InterruptedException {
 				stmt.clearParameters();
-				byte[] val = new BigInteger(guids.take(), 16).toByteArray();
+				byte[] val = new BigInteger(nextGuid, 16).toByteArray();
 				stmt.setBytes(1, val);
 				stmt.setBytes(2, val);
 				stmt.setBytes(3, val);
@@ -180,8 +175,8 @@ public class MysqlBenchmark {
 
 			@Override
 			public void afterBatch() {
-				inserts3.mark();
-				writes3.inc(BATCH_SIZE);
+				Lazy3.inserts3.mark();
+				Lazy3.writes3.inc(BATCH_SIZE);
 			}
 			
 		},
@@ -191,22 +186,34 @@ public class MysqlBenchmark {
 
 		public abstract String getInsertSql();
 
-		public abstract void addRecordToBatch(PreparedStatement stmt) throws SQLException, InterruptedException;
+		public abstract void addRecordToBatch(PreparedStatement stmt, String val) throws SQLException, InterruptedException;
 
 		public abstract void afterBatch();
 	}
 	
-	public static void main(String[] args) {
+	public static void main(String[] args) throws InterruptedException, ExecutionException {
 		startReporter();
 
 		MysqlBenchmark b = new MysqlBenchmark();
 	
-		Strategy s = Strategy.UUID_OPTIMIZED;
-//		for (Strategy s : Strategy.values()) {
+		ExecutorService threadPool = Executors.newFixedThreadPool(NUM_THREADS);
+		ExecutorCompletionService<Void> completionService = new ExecutorCompletionService<>(threadPool);
+		
+//		Strategy s = Strategy.UUID_OPTIMIZED;
+		for (Strategy s : Strategy.values()) {
+			
 			System.out.println("\n\nStarting " + s.name() + "...\n\n");
 			populateGuids(s);
 			stopwatch.reset().start();
-			b.doWriteInBatches(s);
+
+			for (int i=0; i < NUM_THREADS; i++) {
+				completionService.submit(new BatchWriter(s), null);
+			}
+			
+			for (int i=0; i < NUM_THREADS; i++) {
+				completionService.take().get();
+			}
+			
 			System.out.println("\n\n" + s.name() + " took ==================> " + stopwatch);
 			reporter.report();		
 			metrics.removeMatching(new MetricFilter() {
@@ -215,54 +222,67 @@ public class MysqlBenchmark {
 					return name.startsWith(s.name());
 				}
 			});
-//		}
+		}
+			threadPool.shutdown();
 	}
 
 	private static void populateGuids(Strategy s) {
 		guids.clear();
 		for (int i=0; i < TOTAL_RECORDS; i++) 
-			guids.offer(s == Strategy.UUID_CHAR ? 
-					UUID.randomUUID().toString()
-					: LcOptimizedGuids.asHexString());
+			switch (s) {
+			case BASELINE:
+				guids.offer(String.valueOf(i));
+				break;
+			case UUID_CHAR:
+				guids.offer(UUID.randomUUID().toString());
+				break;
+			case UUID_OPTIMIZED:
+				guids.offer(LcOptimizedGuids.asHexString());
+				break;
+			}
 	}
 
-	private void doWriteInBatches(Strategy strategy) {
-		try (Connection conn = getConnection(); 
-				PreparedStatement stmt = conn.prepareStatement(strategy.getInsertSql())) {
-			for (int total = 0; total < TOTAL_RECORDS; total += BATCH_SIZE) {				
-				for (int j=0; j < BATCH_SIZE; j++) {
-					strategy.addRecordToBatch(stmt);
-				}
-				stmt.executeBatch();
-				strategy.afterBatch();
-			}
-		} catch (SQLException | InterruptedException e) {
-			oops(e);
+	private static final class BatchWriter implements Runnable {
+
+		private Strategy strategy;
+
+		public BatchWriter(Strategy s) {
+			strategy = s;
 		}
-	}
 
-	private void query(String sql) {
-		try (Connection conn = getConnection(); 
-				PreparedStatement s = conn.prepareStatement(sql);
-				ResultSet rs = s.executeQuery()) {
-			while (rs.next()) {
-				System.out.println(rs.getInt(1));
+		@Override
+		public void run() {
+			try (Connection conn = getConnection(); 
+					PreparedStatement stmt = conn.prepareStatement(strategy.getInsertSql())) {
+				while (!guids.isEmpty()) {
+					doOneBatch(strategy, stmt);
+				}
+			} catch (SQLException | InterruptedException e) {
+				oops(e);
 			}
-		} catch (SQLException e) {
-			oops(e);
+			
+			System.out.println(Thread.currentThread().getName() + " finished!! ");
+		}
+		
+		private void doOneBatch(Strategy strategy, PreparedStatement stmt) throws SQLException, InterruptedException {
+			ArrayList<String> oneBatch = Lists.newArrayListWithCapacity(BATCH_SIZE);
+			guids.drainTo(oneBatch, BATCH_SIZE);
+ 			for (String val : oneBatch) {
+				strategy.addRecordToBatch(stmt, val);
+			}
+			stmt.executeBatch();
+			strategy.afterBatch();
 		}
 	}
 
 	private static void startReporter() {
-		reporter.start(5, TimeUnit.SECONDS);
+//		reporter.start(5, TimeUnit.SECONDS);
 	}
-
 	
-	private Connection getConnection() {
+	private static Connection getConnection() {
 		try {
 			Connection conn = DriverManager.getConnection(dbUrl, username, password);
 			
-			maybeClean(conn);
 			try (Statement stmt = conn.createStatement()) {
 				stmt.execute("CREATE DATABASE IF NOT EXISTS " + DB_NAME);
 				stmt.execute("USE " + DB_NAME);
@@ -277,15 +297,12 @@ public class MysqlBenchmark {
 		} 
 	}
 
-	private ReentrantLock lock = new ReentrantLock();
-	private boolean isFirst = true; 
-	private void maybeClean(Connection conn) {
-		if (lock.tryLock() && isFirst) {
-			try (Statement stmt = conn.createStatement()) {
-				stmt.execute("DROP DATABASE IF EXISTS " + DB_NAME);
-			} catch (SQLException e) {
-			}
-			isFirst = false;
+	static {
+		try(Connection conn = DriverManager.getConnection(dbUrl, username, password);
+				Statement stmt = conn.createStatement()	) {
+			stmt.execute("DROP DATABASE IF EXISTS " + DB_NAME);
+		} catch (SQLException e1) {
+			oops(e1);
 		}
 	}
 
@@ -302,4 +319,18 @@ public class MysqlBenchmark {
 			oops(e);
 		}
 	}
+	
+	static class Lazy1 {
+		private static final Meter inserts1 = metrics.meter(Strategy.BASELINE.name() + "-meter");
+		private static final Counter writes1 = metrics.counter(Strategy.BASELINE.name() + "-counter"); 
+	}
+	static class Lazy2 {
+		private static final Meter inserts2 = metrics.meter(Strategy.UUID_CHAR.name() + "-meter");
+		private static final Counter writes2 = metrics.counter(Strategy.UUID_CHAR.name() + "-counter");
+	}
+	static class Lazy3 {
+		private static final Meter inserts3 = metrics.meter(Strategy.UUID_OPTIMIZED.name() + "-meter");
+		private static final Counter writes3 = metrics.counter(Strategy.UUID_OPTIMIZED.name() + "-counter");		
+	}
+	
 }
