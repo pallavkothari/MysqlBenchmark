@@ -6,7 +6,11 @@
 - T1 uses bigint : an auto_increment sequence 
 - T2 uses char(36) : a string representation of a type-4 UUID
 - T3 uses binary(16) : a re-ordered type-1 UUID
-- Additionally, each table has 3 additional unique indexes, and several varchar(100) columns
+- InnoDB includes the PK in each secondary index, so each table is set up with 3 additional unique indexes
+- We start off with 10 writer threads, which try to insert 500k records in batches of 1k
+- Readers can end up blocking writers in InnoDB, so we maintain a 10:1 ratio between readers and writers
+    - The query used forces a range scan on the full PK index
+    - Reader pause 100ms after each query
 
 ### Optimized UUID
 The GUID stored in the 16-byte binary variant is a type-1 (time-based) UUID, re-ordered to generate a monotonically increasing sequence, as described [here](https://www.percona.com/blog/2014/12/19/store-uuid-optimized-way/).
@@ -96,6 +100,14 @@ mysql> desc t3;
 +-------+--------------+------+-----+---------+-------+
 21 rows in set (0.00 sec)
 
+
+mysql> explain select sum(length(c20)) from t3 force index (primary) where id < (select max(id) from t3);
++----+-------------+-------+-------+---------------+---------+---------+------+--------+------------------------------+
+| id | select_type | table | type  | possible_keys | key     | key_len | ref  | rows   | Extra                        |
++----+-------------+-------+-------+---------------+---------+---------+------+--------+------------------------------+
+|  1 | PRIMARY     | t3    | range | PRIMARY       | PRIMARY | 16      | NULL | 223656 | Using where                  |
+|  2 | SUBQUERY    | NULL  | NULL  | NULL          | NULL    | NULL    | NULL |   NULL | Select tables optimized away |
++----+-------------+-------+-------+---------------+---------+---------+------+--------+------------------------------+
 
 ```
     
