@@ -1,7 +1,106 @@
 # MysqlBenchmark       
+
+## Setup 
+
+- This benchmark tests read/write performance against 3 tables, which only differ by their primary key
+- T1 uses bigint : an auto_increment sequence 
+- T2 uses char(36) : a string representation of a type-4 UUID
+- T3 uses binary(16) : a re-ordered type-1 UUID
+- Additionally, each table has 3 additional unique indexes, and several varchar(100) columns
+
+### Optimized UUID
+The GUID stored in the 16-byte binary variant is a type-1 (time-based) UUID, re-ordered to generate a monotonically increasing sequence, as described [here](https://www.percona.com/blog/2014/12/19/store-uuid-optimized-way/).
+
+```
+mysql> desc t1;
++-------+---------------------+------+-----+---------+----------------+
+| Field | Type                | Null | Key | Default | Extra          |
++-------+---------------------+------+-----+---------+----------------+
+| id    | bigint(20) unsigned | NO   | PRI | NULL    | auto_increment |
+| c1    | bigint(20)          | NO   | UNI | NULL    |                |
+| c2    | bigint(20)          | NO   | UNI | NULL    |                |
+| c3    | bigint(20)          | NO   | UNI | NULL    |                |
+| c4    | varchar(100)        | YES  |     | NULL    |                |
+| c5    | varchar(100)        | YES  |     | NULL    |                |
+| c6    | varchar(100)        | YES  |     | NULL    |                |
+| c7    | varchar(100)        | YES  |     | NULL    |                |
+| c8    | varchar(100)        | YES  |     | NULL    |                |
+| c9    | varchar(100)        | YES  |     | NULL    |                |
+| c10   | varchar(100)        | YES  |     | NULL    |                |
+| c11   | varchar(100)        | YES  |     | NULL    |                |
+| c12   | varchar(100)        | YES  |     | NULL    |                |
+| c13   | varchar(100)        | YES  |     | NULL    |                |
+| c14   | varchar(100)        | YES  |     | NULL    |                |
+| c15   | varchar(100)        | YES  |     | NULL    |                |
+| c16   | varchar(100)        | YES  |     | NULL    |                |
+| c17   | varchar(100)        | YES  |     | NULL    |                |
+| c18   | varchar(100)        | YES  |     | NULL    |                |
+| c19   | varchar(100)        | YES  |     | NULL    |                |
+| c20   | varchar(100)        | YES  |     | NULL    |                |
++-------+---------------------+------+-----+---------+----------------+
+21 rows in set (0.01 sec)
+
+mysql> desc t2;
++-------+--------------+------+-----+---------+-------+
+| Field | Type         | Null | Key | Default | Extra |
++-------+--------------+------+-----+---------+-------+
+| id    | char(36)     | NO   | PRI | NULL    |       |
+| c1    | char(36)     | NO   | UNI | NULL    |       |
+| c2    | char(36)     | NO   | UNI | NULL    |       |
+| c3    | char(36)     | NO   | UNI | NULL    |       |
+| c4    | varchar(100) | YES  |     | NULL    |       |
+| c5    | varchar(100) | YES  |     | NULL    |       |
+| c6    | varchar(100) | YES  |     | NULL    |       |
+| c7    | varchar(100) | YES  |     | NULL    |       |
+| c8    | varchar(100) | YES  |     | NULL    |       |
+| c9    | varchar(100) | YES  |     | NULL    |       |
+| c10   | varchar(100) | YES  |     | NULL    |       |
+| c11   | varchar(100) | YES  |     | NULL    |       |
+| c12   | varchar(100) | YES  |     | NULL    |       |
+| c13   | varchar(100) | YES  |     | NULL    |       |
+| c14   | varchar(100) | YES  |     | NULL    |       |
+| c15   | varchar(100) | YES  |     | NULL    |       |
+| c16   | varchar(100) | YES  |     | NULL    |       |
+| c17   | varchar(100) | YES  |     | NULL    |       |
+| c18   | varchar(100) | YES  |     | NULL    |       |
+| c19   | varchar(100) | YES  |     | NULL    |       |
+| c20   | varchar(100) | YES  |     | NULL    |       |
++-------+--------------+------+-----+---------+-------+
+21 rows in set (0.00 sec)
+
+mysql> desc t3;
++-------+--------------+------+-----+---------+-------+
+| Field | Type         | Null | Key | Default | Extra |
++-------+--------------+------+-----+---------+-------+
+| id    | binary(16)   | NO   | PRI | NULL    |       |
+| c1    | binary(16)   | NO   | UNI | NULL    |       |
+| c2    | binary(16)   | NO   | UNI | NULL    |       |
+| c3    | binary(16)   | NO   | UNI | NULL    |       |
+| c4    | varchar(100) | YES  |     | NULL    |       |
+| c5    | varchar(100) | YES  |     | NULL    |       |
+| c6    | varchar(100) | YES  |     | NULL    |       |
+| c7    | varchar(100) | YES  |     | NULL    |       |
+| c8    | varchar(100) | YES  |     | NULL    |       |
+| c9    | varchar(100) | YES  |     | NULL    |       |
+| c10   | varchar(100) | YES  |     | NULL    |       |
+| c11   | varchar(100) | YES  |     | NULL    |       |
+| c12   | varchar(100) | YES  |     | NULL    |       |
+| c13   | varchar(100) | YES  |     | NULL    |       |
+| c14   | varchar(100) | YES  |     | NULL    |       |
+| c15   | varchar(100) | YES  |     | NULL    |       |
+| c16   | varchar(100) | YES  |     | NULL    |       |
+| c17   | varchar(100) | YES  |     | NULL    |       |
+| c18   | varchar(100) | YES  |     | NULL    |       |
+| c19   | varchar(100) | YES  |     | NULL    |       |
+| c20   | varchar(100) | YES  |     | NULL    |       |
++-------+--------------+------+-----+---------+-------+
+21 rows in set (0.00 sec)
+
+
+```
     
 **********************************************************************************    
-test 1 (10 writers, 100 readers, 500k records, written in batches of 1k)    
+####test 1 (10 writers, 100 readers, 500k records, written in batches of 1k)    
 **********************************************************************************    
     
 ```    
@@ -94,7 +193,7 @@ UUID_OPTIMIZED-writes
     
     
 **********************************************************************************    
-test 2 (10 writers, 100 readers, 500k records, written in batches of 10k instead of 1k)    
+####test 2 (10 writers, 100 readers, 500k records, written in batches of 10k instead of 1k)    
 **********************************************************************************    
     
 ```    
@@ -187,7 +286,7 @@ UUID_OPTIMIZED-writes
     
     
 **********************************************************************************    
-test 3 : 10 writers, 100 readers, 100k records, written in batches of 1k    
+####test 3 : 10 writers, 100 readers, 100k records, written in batches of 1k    
 **********************************************************************************    
     
 ```    
@@ -280,7 +379,7 @@ UUID_OPTIMIZED-writes
     
     
 **********************************************************************************    
-test 4 (10 writers, 100 readers, 100k records, written in batches of 1k)    
+####test 4 (10 writers, 100 readers, 100k records, written in batches of 1k)    
 **********************************************************************************    
 
 ```    
@@ -372,7 +471,8 @@ UUID_OPTIMIZED-writes
     
 *********************************************************************************************    
      
-    
+####Write-only workload 
+
 The following analysis is from a WRITE-ONLY workload with 10 threads. No reads at all.     
     
 BASELINE => pk is a bigint(8)       
@@ -453,7 +553,7 @@ UUID_OPTIMIZED-meter
 ***************************************************************     
       
      
-      
+####Single-threaded write-only workload      
      
      
 Old results (single thread, 500k records):      
