@@ -114,7 +114,7 @@ mysql> explain select sum(length(c20)) from t3 force index (primary) where id < 
 #### Using optimized UUID stored as CHAR; 6/6/2016 (10 writers, 100 readers, 500k records, written in batches of 1k)
 **********************************************************************************
 
-
+```
 Starting BASELINE...
 
 
@@ -198,7 +198,7 @@ UUID_OPTIMIZED-writes
      1-minute rate = 1.71 events/second
      5-minute rate = 1.56 events/second
     15-minute rate = 1.56 events/second
-
+```
 
 
 
