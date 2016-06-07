@@ -110,7 +110,99 @@ mysql> explain select sum(length(c20)) from t3 force index (primary) where id < 
 +----+-------------+-------+-------+---------------+---------+---------+------+--------+------------------------------+
 
 ```
-    
+**********************************************************************************
+#### Using optimized UUID stored as CHAR; 6/6/2016 (10 writers, 100 readers, 500k records, written in batches of 1k)
+**********************************************************************************
+
+
+Starting BASELINE...
+
+
+
+
+BASELINE took ==================> 10.33 min
+6/6/16 11:10:50 PM =============================================================
+
+-- Counters --------------------------------------------------------------------
+BASELINE-counter
+             count = 500000
+
+-- Meters ----------------------------------------------------------------------
+BASELINE-reads
+             count = 40108
+         mean rate = 64.73 events/second
+     1-minute rate = 5.73 events/second
+     5-minute rate = 140.04 events/second
+    15-minute rate = 473.98 events/second
+BASELINE-writes
+             count = 500
+         mean rate = 0.81 events/second
+     1-minute rate = 0.51 events/second
+     5-minute rate = 0.71 events/second
+    15-minute rate = 0.78 events/second
+
+
+
+
+Starting UUID_CHAR_REORDERED...
+
+
+
+
+UUID_CHAR_REORDERED took ==================> 9.000 min
+6/6/16 11:19:50 PM =============================================================
+
+-- Counters --------------------------------------------------------------------
+UUID_CHAR_REORDERED-counter
+             count = 500000
+
+-- Meters ----------------------------------------------------------------------
+UUID_CHAR_REORDERED-reads
+             count = 17132
+         mean rate = 31.73 events/second
+     1-minute rate = 3.85 events/second
+     5-minute rate = 137.66 events/second
+    15-minute rate = 420.45 events/second
+UUID_CHAR_REORDERED-writes
+             count = 500
+         mean rate = 0.93 events/second
+     1-minute rate = 0.77 events/second
+     5-minute rate = 0.72 events/second
+    15-minute rate = 0.41 events/second
+
+
+
+
+Starting UUID_OPTIMIZED...
+
+
+
+
+UUID_OPTIMIZED took ==================> 5.653 min
+6/6/16 11:25:30 PM =============================================================
+
+-- Counters --------------------------------------------------------------------
+UUID_OPTIMIZED-counter
+             count = 500000
+
+-- Meters ----------------------------------------------------------------------
+UUID_OPTIMIZED-reads
+             count = 26835
+         mean rate = 79.12 events/second
+     1-minute rate = 23.40 events/second
+     5-minute rate = 308.93 events/second
+    15-minute rate = 592.29 events/second
+UUID_OPTIMIZED-writes
+             count = 500
+         mean rate = 1.47 events/second
+     1-minute rate = 1.71 events/second
+     5-minute rate = 1.56 events/second
+    15-minute rate = 1.56 events/second
+
+
+
+
+
 **********************************************************************************    
 ####test 1 (10 writers, 100 readers, 500k records, written in batches of 1k)    
 **********************************************************************************    

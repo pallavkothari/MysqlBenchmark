@@ -1,34 +1,16 @@
 package com.lendingclub.MysqlBenchmark;
 
-import java.math.BigInteger;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.Random;
-import java.util.UUID;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorCompletionService;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingDeque;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-
-import com.codahale.metrics.ConsoleReporter;
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.Meter;
-import com.codahale.metrics.Metric;
-import com.codahale.metrics.MetricFilter;
-import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.*;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
+
+import java.math.BigInteger;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.Random;
+import java.util.concurrent.*;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * 
@@ -103,7 +85,7 @@ public class MysqlBenchmark {
 			}
 		}, 
 		
-		UUID_CHAR {
+		UUID_CHAR_REORDERED {
 			@Override
 			public String getDDL() {
 				return "CREATE TABLE IF NOT EXISTS " + getTable() 
@@ -294,8 +276,9 @@ public class MysqlBenchmark {
 			case BASELINE:
 				guids.offer(String.valueOf(i));
 				break;
-			case UUID_CHAR:
-				guids.offer(UUID.randomUUID().toString());
+			case UUID_CHAR_REORDERED:
+				//guids.offer(UUID.randomUUID().toString());
+				guids.offer(LcOptimizedGuids.asHyphenatedHexString());
 				break;
 			case UUID_OPTIMIZED:
 				guids.offer(LcOptimizedGuids.asHexString());
@@ -412,9 +395,9 @@ public class MysqlBenchmark {
 		private static final Counter writes1 = metrics.counter(Strategy.BASELINE.name() + "-counter"); 
 	}
 	static class Lazy2 {
-		private static final Meter inserts2 = metrics.meter(Strategy.UUID_CHAR.name() + "-writes");
-		private static final Meter reads2 = metrics.meter(Strategy.UUID_CHAR.name() + "-reads");
-		private static final Counter writes2 = metrics.counter(Strategy.UUID_CHAR.name() + "-counter");
+		private static final Meter inserts2 = metrics.meter(Strategy.UUID_CHAR_REORDERED.name() + "-writes");
+		private static final Meter reads2 = metrics.meter(Strategy.UUID_CHAR_REORDERED.name() + "-reads");
+		private static final Counter writes2 = metrics.counter(Strategy.UUID_CHAR_REORDERED.name() + "-counter");
 	}
 	static class Lazy3 {
 		private static final Meter inserts3 = metrics.meter(Strategy.UUID_OPTIMIZED.name() + "-writes");
