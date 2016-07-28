@@ -1,4 +1,4 @@
-package com.lendingclub.MysqlBenchmark;
+package benchmark;
 
 import com.codahale.metrics.*;
 import com.google.common.base.Stopwatch;
@@ -278,10 +278,10 @@ public class MysqlBenchmark {
 				break;
 			case UUID_CHAR_REORDERED:
 				//guids.offer(UUID.randomUUID().toString());
-				guids.offer(LcOptimizedGuids.asHyphenatedHexString());
+				guids.offer(OptimizedGuids.asHyphenatedHexString());
 				break;
 			case UUID_OPTIMIZED:
-				guids.offer(LcOptimizedGuids.asHexString());
+				guids.offer(OptimizedGuids.asHexString());
 				break;
 			}
 	}

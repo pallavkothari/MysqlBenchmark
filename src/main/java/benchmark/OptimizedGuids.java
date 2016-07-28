@@ -1,4 +1,4 @@
-package com.lendingclub.MysqlBenchmark;
+package benchmark;
 
 import com.fasterxml.uuid.EthernetAddress;
 import com.fasterxml.uuid.Generators;
@@ -8,7 +8,7 @@ import com.google.common.base.Splitter;
 
 import java.util.List;
 
-public class LcOptimizedGuids {
+public class OptimizedGuids {
 
 	private static final TimeBasedGenerator gen = Generators.timeBasedGenerator(EthernetAddress.fromInterface());
 	private static Splitter splitter = Splitter.on('-');
@@ -24,7 +24,7 @@ public class LcOptimizedGuids {
 	}
 
 	private static String asHex(boolean useDashJoiner) {
-		Joiner joiner = useDashJoiner ? dashJoiner : LcOptimizedGuids.joiner;
+		Joiner joiner = useDashJoiner ? dashJoiner : OptimizedGuids.joiner;
 		String uuid = gen.generate().toString();
 		List<String> parts = splitter.splitToList(uuid);
 		return joiner.join(parts.get(2) , parts.get(1) , parts.get(0) , parts.get(3) , parts.get(4));
